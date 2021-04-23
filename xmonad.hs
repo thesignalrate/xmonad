@@ -14,6 +14,7 @@ import XMonad.Operations (sendMessage)
 -- Hooks
 import XMonad.Hooks.ManageDocks --(avoidStruts, docksEventHook, manageDocks, ToggleStruts(..))
 import XMonad.Hooks.DynamicLog (dynamicLogWithPP, wrap, xmobarPP, xmobarColor, shorten, PP(..))
+import XMonad.Hooks.InsertPosition
 
 -- Layouts
 import XMonad.Layout
@@ -23,19 +24,27 @@ import XMonad.Layout.Grid (Grid(..))
 import XMonad.Layout.TwoPane (TwoPane(..))
 import XMonad.Layout.Tabbed (simpleTabbed)
 import XMonad.Layout.CenteredMaster
-import XMonad.Layout.ToggleLayouts
 import XMonad.Layout.LimitWindows (limitWindows, increaseLimit, decreaseLimit)
 import XMonad.Layout.Renamed (renamed, Rename(Replace))
 import XMonad.Layout.Spacing
+import XMonad.Layout.ResizableTile
+import qualified XMonad.Layout.ToggleLayouts as T (toggleLayouts, ToggleLayout(Toggle))
+import qualified XMonad.Layout.MultiToggle as MT (Toggle(..))
 
 -- Actions
+import XMonad.Actions.RotSlaves (rotSlavesDown, rotAllDown)
 import XMonad.Actions.CopyWindow (kill1, killAllOtherCopies, copyToAll, copyWindow)
 import XMonad.Actions.WithAll (sinkAll, killAll)
+import XMonad.Actions.Promote
+import XMonad.Actions.WindowGo (runOrRaise)
 
 -- Utilities
 import XMonad.Util.Run (runProcessWithInput, safeSpawn, spawnPipe)
 import XMonad.Util.SpawnOnce 
 import XMonad.Util.EZConfig
+
+-- Others
+import qualified XMonad.StackSet as W
 
 {-
 # My configurations
@@ -47,6 +56,8 @@ import XMonad.Util.EZConfig
 
 myModKey = mod4Mask
 myTerminal = "alacritty"
+myEditor = "emacsclient -c -a 'emacs' "
+myEmacs = "emacsclient -c -a 'emacs' "
 myWorkspaces = ["dev", "www", "dev2", "net", "gfx", "media", "vbox", "tmp"]
 myBorderWidth = 3
 
@@ -97,7 +108,7 @@ myManageHook = composeAll
      , title =? "Mozilla Firefox"     --> doShift ( myWorkspaces !! 1 )
      , className =? "brave-browser"   --> doShift ( myWorkspaces !! 1 )
      , className =? "qutebrowser"     --> doShift ( myWorkspaces !! 1 )
-     , title =? "video0 - mpv"        --> doFloat <+> doCopyToAll
+     , title =? "video0 - mpv"        --> insertPosition Below Older <+> doFloat <+> doCopyToAll
      , className =? "mpv"             --> doShift ( myWorkspaces !! 5 )
      , className =? "Gimp"            --> doShift ( myWorkspaces !! 8 )
      , className =? "VirtualBox Manager" --> doShift  ( myWorkspaces !! 6 )
@@ -132,7 +143,7 @@ grid = renamed [Replace "grid"]
        $ Grid
            
 myLayoutHook =  avoidStruts 
-              $ toggleLayouts Full
+              $ T.toggleLayouts Full
               $ smartBorders
                           (tall
                        ||| centeredmaster
@@ -154,14 +165,75 @@ myKeys =
         , ("M-<Return>", spawn myTerminal)
     -- Windows
         , ("M-S-c", kill1) 
-        , ("M-w", killAllOtherCopies <+> kill1)         
+        , ("M-<Backspace>", killAllOtherCopies <+> kill1)
+        , ("M-<Escape>", killAllOtherCopies)
         , ("M-S-a", killAll)                         -- Kill all windows on current workspace
     -- Copy
-        , ("M-C-c", windows copyToAll)
+        , ("M-x c", windows copyToAll)
     -- Camera
         , ("M-c", spawn "toggle_camera")
     -- Layouts
         , ("M-S-<Space>", sendMessage ToggleStruts)
+
+     -- Floating windows
+        , ("M-t", withFocused $ windows . W.sink)  -- Push floating window back to tile
+        , ("M-S-t", sinkAll)                       -- Push ALL floating windows to tile
+
+    -- Increase/decrease spacing (gaps)
+        , ("M-d", decWindowSpacing 4)           -- Decrease window spacing
+        , ("M-i", incWindowSpacing 4)           -- Increase window spacing
+        , ("M-S-d", decScreenSpacing 4)         -- Decrease screen spacing
+        , ("M-S-i", incScreenSpacing 4)         -- Increase screen spacing
+
+      -- Windows navigation
+        , ("M-m", windows W.focusMaster)  -- Move focus to the master window
+        , ("M-j", windows W.focusDown)    -- Move focus to the next window
+        , ("M-k", windows W.focusUp)      -- Move focus to the prev window
+        , ("M-S-m", windows W.swapMaster) -- Swap the focused window and the master window
+        , ("M-S-j", windows W.swapDown)   -- Swap focused window with next window
+        , ("M-S-k", windows W.swapUp)     -- Swap focused window with prev window
+        , ("M-f", promote)      -- Moves focused window to master, others maintain order
+        , ("M-S-<Tab>", rotSlavesDown)    -- Rotate all windows except master and keep focus in place
+        , ("M-C-<Tab>", rotAllDown)       -- Rotate all the windows in the current stack
+
+
+        -- Window resizing
+        , ("M-h", sendMessage Shrink)                   -- Shrink horiz window width
+        , ("M-l", sendMessage Expand)                   -- Expand horiz window width
+        , ("M-M1-j", sendMessage MirrorShrink)          -- Shrink vert window width
+        , ("M-M1-k", sendMessage MirrorExpand)          -- Expand vert window width
+
+
+        -- Controls for mocp music player (SUPER-u followed by a key)
+        , ("M-u p", spawn "mocp --play")
+        , ("M-u l", spawn "mocp --next")
+        , ("M-u h", spawn "mocp --previous")
+        , ("M-u <Space>", spawn "mocp --toggle-pause")
+
+        -- Emacs (Super-e followed by a key)
+        , ("M-e e", spawn myEmacs)                 -- start emacs
+        , ("M-e r", spawn (myEmacs ++ ("--eval '(dashboard-refresh-buffer)'")))   -- emacs dashboard
+        , ("M-e b", spawn (myEmacs ++ ("--eval '(ibuffer)'")))   -- list buffers
+        , ("M-e d", spawn (myEmacs ++ ("--eval '(dired nil)'"))) -- dired
+        , ("M-e m", spawn (myEmacs ++ ("--eval '(mu4e)'")))      -- mu4e email
+        , ("M-e s", spawn (myEmacs ++ ("--eval '(eshell)'")))    -- eshell
+        , ("M-e o", spawn (myEmacs ++ ("--eval '(progn (switch-to-buffer \"*scratch.org*\") (org-mode))'")))
+
+        -- Multimedia Keys
+        , ("<XF86AudioPlay>", spawn (myTerminal ++ "mocp --play"))
+        , ("<XF86AudioPrev>", spawn (myTerminal ++ "mocp --previous"))
+        , ("<XF86AudioNext>", spawn (myTerminal ++ "mocp --next"))
+        , ("<XF86AudioMute>",   spawn "amixer set Master toggle")
+        , ("<XF86AudioLowerVolume>", spawn "amixer set Master 5%- unmute")
+        , ("<XF86AudioRaiseVolume>", spawn "amixer set Master 5%+ unmute")
+        , ("<XF86HomePage>", spawn "firefox")
+        , ("<XF86Search>", safeSpawn "firefox" ["https://www.duckduckgo.com/"])
+        , ("<XF86Mail>", runOrRaise "thunderbird" (resource =? "thunderbird"))
+        , ("<XF86Calculator>", runOrRaise "qalculate-gtk" (resource =? "qalculate-gtk"))
+        , ("<XF86Eject>", spawn "toggleeject")
+        , ("<Print>", spawn "scrotd 0")
+
+
         ]
   
 main = do
@@ -191,6 +263,5 @@ main = do
               , ppLayout = (\l -> "<fn=0><fc=#d8a752>layout: " ++ l ++ "</fc></fn>")             
               , ppOrder  = \(ws:l:t:ex) -> [ws,l]++ex++[t]                    -- order of things in xmobar
               }
-
        } `additionalKeysP` myKeys
 
