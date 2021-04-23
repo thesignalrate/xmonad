@@ -76,16 +76,28 @@ centeredmaster     = centerMaster
            $ limitWindows 12
            $ spacingModified 3
            $ Tall 1 (3/100) (1/2)
+
+full 	= renamed [Replace "full"]
+          $ Full
+
+twopane = renamed [Replace "twopane"]
+          $ TwoPane (15/100) (55/100)
+
+mirror = renamed [Replace "mirror"]
+         $ Mirror (Tall 1 (10/100) (60/100))
+
+grid = renamed [Replace "grid"]
+       $ Grid
            
 myLayoutHook =  avoidStruts 
               $ toggleLayouts Full
               $ smartBorders
                           (tall
                        ||| centeredmaster
-                       ||| Full
-                       ||| TwoPane (15/100) (55/100)
-                       ||| Mirror (Tall 1 (10/100) (60/100))
-                       ||| Grid
+                       ||| full
+                       ||| twopane
+                       ||| mirror
+                       ||| grid
                        ||| simpleTabbed)
               
 
