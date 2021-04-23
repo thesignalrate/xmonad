@@ -6,6 +6,7 @@ import System.Exit (exitSuccess)
 
 -- Data
 import Data.Monoid
+import Data.Maybe (isJust)
 
 
 -- Operations
@@ -15,6 +16,7 @@ import XMonad.Operations (sendMessage)
 import XMonad.Hooks.ManageDocks --(avoidStruts, docksEventHook, manageDocks, ToggleStruts(..))
 import XMonad.Hooks.DynamicLog (dynamicLogWithPP, wrap, xmobarPP, xmobarColor, shorten, PP(..))
 import XMonad.Hooks.InsertPosition
+import XMonad.Hooks.SetWMName
 
 -- Layouts
 import XMonad.Layout
@@ -32,19 +34,24 @@ import qualified XMonad.Layout.ToggleLayouts as T (toggleLayouts, ToggleLayout(T
 import qualified XMonad.Layout.MultiToggle as MT (Toggle(..))
 
 -- Actions
+import XMonad.Actions.CycleWS (Direction1D(..), moveTo, shiftTo, WSType(..), nextScreen, prevScreen)
 import XMonad.Actions.RotSlaves (rotSlavesDown, rotAllDown)
 import XMonad.Actions.CopyWindow (kill1, killAllOtherCopies, copyToAll, copyWindow)
 import XMonad.Actions.WithAll (sinkAll, killAll)
 import XMonad.Actions.Promote
 import XMonad.Actions.WindowGo (runOrRaise)
+import XMonad.Actions.DynamicProjects
+import XMonad.Actions.TagWindows
 
 -- Utilities
 import XMonad.Util.Run (runProcessWithInput, safeSpawn, spawnPipe)
 import XMonad.Util.SpawnOnce 
 import XMonad.Util.EZConfig
+import XMonad.Util.NamedScratchpad
 
 -- Others
 import qualified XMonad.StackSet as W
+import XMonad.Prompt
 
 {-
 # My configurations
@@ -58,6 +65,8 @@ myModKey = mod4Mask
 myTerminal = "alacritty"
 myEditor = "emacsclient -c -a 'emacs' "
 myEmacs = "emacsclient -c -a 'emacs' "
+myBrowser = "firefox "
+mySecondaryBrowser = "qutebrowser "
 myWorkspaces = ["dev", "www", "dev2", "net", "gfx", "media", "vbox", "tmp"]
 myBorderWidth = 3
 
@@ -78,6 +87,7 @@ myStartupHook = do
           spawnOnce "/usr/bin/emacs --daemon &"
           spawnOnce "~/.dotfiles/scripts/k &"
           spawnOnce "sxhkd &"
+          setWMName "LG3D"
 
 doCopy :: WorkspaceId -> ManageHook
 doCopy m = ask >>= \w -> doF (copyWindow w m)
@@ -113,7 +123,7 @@ myManageHook = composeAll
      , className =? "Gimp"            --> doShift ( myWorkspaces !! 8 )
      , className =? "VirtualBox Manager" --> doShift  ( myWorkspaces !! 6 )
      , (className =? "firefox" <&&> resource =? "Dialog") --> doFloat  -- Float Firefox Dialog
-     ] -- <+> namedScratchpadManageHook myScratchPads
+     ] <+> namedScratchpadManageHook myScratchPads
 
 -- Layouts
 
@@ -163,6 +173,16 @@ myKeys =
 
     -- Open my preferred terminal
         , ("M-<Return>", spawn myTerminal)
+
+    -- Dynamic Projects
+        , ("M-x p p", switchProjectPrompt def { font="xft:Noto Sans:weight=bold:pixelsize=15"
+                                               })
+        , ("M-x p s", shiftToProjectPrompt def { font="xft:Noto Sans:weight=bold:pixelsize=15"
+                                              })
+        , ("M-x p r", renameProjectPrompt def { font="xft:Noto Sans:weight=bold:pixelsize=15"
+                                              })
+        , ("M-x p d", changeProjectDirPrompt def { font="xft:Noto Sans:weight=bold:pixelsize=15"
+                                                 })
     -- Windows
         , ("M-S-c", kill1) 
         , ("M-<Backspace>", killAllOtherCopies <+> kill1)
@@ -185,6 +205,14 @@ myKeys =
         , ("M-S-d", decScreenSpacing 4)         -- Decrease screen spacing
         , ("M-S-i", incScreenSpacing 4)         -- Increase screen spacing
 
+        -- Workspaces
+        , ("M-.", nextScreen)  -- Switch focus to next monitor
+        , ("M-,", prevScreen)  -- Switch focus to prev monitor
+        , ("M-<Right>", moveTo Next nonNSP)     
+        , ("M-<Left>", moveTo Prev nonNSP) 
+        , ("M-S-<Right>", shiftTo Next nonNSP)
+        , ("M-S-<Left>", shiftTo Prev nonNSP)
+        
       -- Windows navigation
         , ("M-m", windows W.focusMaster)  -- Move focus to the master window
         , ("M-j", windows W.focusDown)    -- Move focus to the next window
@@ -204,6 +232,15 @@ myKeys =
         , ("M-M1-k", sendMessage MirrorExpand)          -- Expand vert window width
 
 
+        -- Scratchpads
+        -- Toggle show/hide these programs.  They run on a hidden workspace.
+        -- When you toggle them to show, it brings them to your current workspace.
+        -- Toggle them to hide and it sends them back to hidden workspace (NSP).
+        , ("M-s t", namedScratchpadAction myScratchPads "terminal")
+        , ("M-s m", namedScratchpadAction myScratchPads "mocp")
+        , ("M-s c", namedScratchpadAction myScratchPads "calculator")
+
+        
         -- Controls for mocp music player (SUPER-u followed by a key)
         , ("M-u p", spawn "mocp --play")
         , ("M-u l", spawn "mocp --next")
@@ -219,6 +256,17 @@ myKeys =
         , ("M-e s", spawn (myEmacs ++ ("--eval '(eshell)'")))    -- eshell
         , ("M-e o", spawn (myEmacs ++ ("--eval '(progn (switch-to-buffer \"*scratch.org*\") (org-mode))'")))
 
+        -- Browser
+        , ("M-w w", spawn myBrowser)
+        , ("M-w g", spawn (myBrowser ++ "https://google.com"))
+
+        , ("M-b w", spawn mySecondaryBrowser)
+        , ("M-b g", spawn (mySecondaryBrowser ++ "https://google.com"))
+
+        , ("M-<F1>", spawn "sxiv -r -q -t -o ~/wallpapers/*")
+        , ("M-<F2>", spawn "nitrogen --random")
+
+        
         -- Multimedia Keys
         , ("<XF86AudioPlay>", spawn (myTerminal ++ "mocp --play"))
         , ("<XF86AudioPrev>", spawn (myTerminal ++ "mocp --previous"))
@@ -235,10 +283,57 @@ myKeys =
 
 
         ]
-  
+          where nonNSP          = WSIs (return (\ws -> W.tag ws /= "NSP"))
+                nonEmptyNonNSP  = WSIs (return (\ws -> isJust (W.stack ws) && W.tag ws /= "NSP"))
+
+
+myScratchPads :: [NamedScratchpad]
+myScratchPads = [ NS "terminal" spawnTerm findTerm manageTerm
+                , NS "mocp" spawnMocp findMocp manageMocp
+                , NS "calculator" spawnCalc findCalc manageCalc
+                ]
+  where
+    spawnTerm  = myTerminal ++ " -t scratchpad"
+    findTerm   = title =? "scratchpad"
+    manageTerm = customFloating $ W.RationalRect l t w h
+               where
+                 h = 0.9
+                 w = 0.9
+                 t = 0.95 -h
+                 l = 0.95 -w
+    spawnMocp  = myTerminal ++ " -t mocp -e mocp"
+    findMocp   = title =? "mocp"
+    manageMocp = customFloating $ W.RationalRect l t w h
+               where
+                 h = 0.9
+                 w = 0.9
+                 t = 0.95 -h
+                 l = 0.95 -w 
+    spawnCalc  = "qalculate-gtk"
+    findCalc   = className =? "Qalculate-gtk"
+    manageCalc = customFloating $ W.RationalRect l t w h
+               where
+                 h = 0.5
+                 w = 0.4
+                 t = 0.75 -h
+                 l = 0.70 -w
+
+myProjects :: [Project]
+myProjects =
+  [ Project { projectName      = "scratch"
+            , projectDirectory = "~/"
+            , projectStartHook = Nothing
+            }
+
+  , Project { projectName      = "browser"
+            , projectDirectory = "~/Downloads"
+            , projectStartHook = Nothing
+            }
+  ]             
+
 main = do
     xmproc0 <- spawnPipe "xmobar -x 0 $HOME/.config/xmobar/xmobarrc" 
-    xmonad $ fullscreenSupport $ docks def
+    xmonad $ fullscreenSupport $ docks $ dynamicProjects myProjects def
        { modMask = myModKey
        , workspaces = myWorkspaces
        , terminal = myTerminal
@@ -249,7 +344,7 @@ main = do
        , layoutHook = myLayoutHook
        , startupHook = myStartupHook
        , manageHook = myManageHook
-       , logHook = dynamicLogWithPP $ xmobarPP
+       , logHook = dynamicLogWithPP $ namedScratchpadFilterOutWorkspacePP $ dynamicProjectFilterOutWorkspacePP $ xmobarPP
               -- the following variables beginning with 'pp' are settings for xmobar.
               { ppOutput = hPutStrLn xmproc0
               , ppCurrent = xmobarColor "#98be65" "" . wrap "[" "]"           -- Current workspace
@@ -265,3 +360,10 @@ main = do
               }
        } `additionalKeysP` myKeys
 
+
+dynamicProjectFilterOutWorkspace :: [WindowSpace] -> [WindowSpace]
+dynamicProjectFilterOutWorkspace = filter (\(W.Workspace tag _ _) -> elem tag myWorkspaces)
+dynamicProjectFilterOutWorkspacePP :: PP -> PP
+dynamicProjectFilterOutWorkspacePP pp = pp {
+  ppSort = fmap (. dynamicProjectFilterOutWorkspace) (ppSort pp)
+  }
