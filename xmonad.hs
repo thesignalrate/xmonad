@@ -18,6 +18,7 @@ import XMonad.Layout.Fullscreen (fullscreenFull, fullscreenSupport)
 import XMonad.Layout.Grid (Grid(..))
 import XMonad.Layout.TwoPane (TwoPane(..))
 import XMonad.Layout.Tabbed (simpleTabbed)
+import XMonad.Layout.CenteredMaster
 import XMonad.Layout.ToggleLayouts
 import XMonad.Layout.LimitWindows (limitWindows, increaseLimit, decreaseLimit)
 import XMonad.Layout.Renamed (renamed, Rename(Replace))
@@ -70,10 +71,17 @@ tall     = renamed [Replace "tall"]
            $ spacingModified 3
            $ Tall 1 (3/100) (1/2) 
 
+centeredmaster     = centerMaster
+           $ renamed [Replace "centered"]
+           $ limitWindows 12
+           $ spacingModified 3
+           $ Tall 1 (3/100) (1/2)
+           
 myLayoutHook =  avoidStruts 
               $ toggleLayouts Full
               $ smartBorders
-                          (tall 
+                          (tall
+                       ||| centeredmaster
                        ||| Full
                        ||| TwoPane (15/100) (55/100)
                        ||| Mirror (Tall 1 (10/100) (60/100))
@@ -121,6 +129,7 @@ main = do
               , ppSep =  "<fc=#666666> <fn=1>|</fn> </fc>"                    -- Separator character
               , ppUrgent = xmobarColor "#C45500" "" . wrap "!" "!"            -- Urgent workspace
               , ppExtras  = []                                     -- # of windows current workspace
+              , ppLayout = (\l -> "<fn=0><fc=#d8a752>layout: " ++ l ++ "</fc></fn>")             
               , ppOrder  = \(ws:l:t:ex) -> [ws,l]++ex++[t]                    -- order of things in xmobar
               }
 
