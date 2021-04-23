@@ -4,6 +4,10 @@ import XMonad
 import System.IO (hPutStrLn)
 import System.Exit (exitSuccess)
 
+-- Data
+import Data.Monoid
+
+
 -- Operations
 import XMonad.Operations (sendMessage)
 
@@ -25,7 +29,7 @@ import XMonad.Layout.Renamed (renamed, Rename(Replace))
 import XMonad.Layout.Spacing
 
 -- Actions
-import XMonad.Actions.CopyWindow (kill1, killAllOtherCopies)
+import XMonad.Actions.CopyWindow (kill1, killAllOtherCopies, copyToAll, copyWindow)
 import XMonad.Actions.WithAll (sinkAll, killAll)
 
 -- Utilities
@@ -43,7 +47,7 @@ import XMonad.Util.EZConfig
 
 myModKey = mod4Mask
 myTerminal = "alacritty"
-myWorkspaces = ["dev", "www", "net", "gfx", "media", "tmp"]
+myWorkspaces = ["dev", "www", "dev2", "net", "gfx", "media", "vbox", "tmp"]
 myBorderWidth = 3
 
 
@@ -63,6 +67,44 @@ myStartupHook = do
           spawnOnce "/usr/bin/emacs --daemon &"
           spawnOnce "~/.dotfiles/scripts/k &"
           spawnOnce "sxhkd &"
+
+doCopy :: WorkspaceId -> ManageHook
+doCopy m = ask >>= \w -> doF (copyWindow w m)
+
+appendHookCopy [] = doCopy(myWorkspaces !! 1) -- To avoid infinite recursion apply copying to workspace 1 again.
+appendHookCopy (w:wm) = doCopy(w) <+> appendHookCopy(wm)
+doCopyToAll :: ManageHook
+doCopyToAll = appendHookCopy myWorkspaces
+
+
+myManageHook :: XMonad.Query (Data.Monoid.Endo WindowSet)
+myManageHook = composeAll
+     -- 'doFloat' forces a window to float.  Useful for dialog boxes and such.
+     -- using 'doShift ( myWorkspaces !! 7)' sends program to workspace 8!
+     -- I'm doing it this way because otherwise I would have to write out the full
+     -- name of my workspaces and the names would be very long if using clickable workspaces.
+     [ className =? "confirm"         --> doFloat
+     , className =? "file_progress"   --> doFloat
+     , className =? "dialog"          --> doFloat
+     , className =? "download"        --> doFloat
+     , className =? "error"           --> doFloat
+     , className =? "Gimp"            --> doFloat
+     , className =? "notification"    --> doFloat
+     , className =? "pinentry-gtk-2"  --> doFloat
+     , className =? "splash"          --> doFloat
+     , className =? "toolbar"         --> doFloat
+     --, title =? "Oracle VM VirtualBox Manager"  --> doFloat
+     , title =? "Mozilla Firefox"     --> doShift ( myWorkspaces !! 1 )
+     , className =? "brave-browser"   --> doShift ( myWorkspaces !! 1 )
+     , className =? "qutebrowser"     --> doShift ( myWorkspaces !! 1 )
+     , title =? "video0 - mpv"        --> doFloat <+> doCopyToAll
+     , className =? "mpv"             --> doShift ( myWorkspaces !! 5 )
+     , className =? "Gimp"            --> doShift ( myWorkspaces !! 8 )
+     , className =? "VirtualBox Manager" --> doShift  ( myWorkspaces !! 6 )
+     , (className =? "firefox" <&&> resource =? "Dialog") --> doFloat  -- Float Firefox Dialog
+     ] -- <+> namedScratchpadManageHook myScratchPads
+
+-- Layouts
 
 spacingModified i = spacingRaw True (Border i i i i) True (Border i i i i) True
 
@@ -111,9 +153,13 @@ myKeys =
     -- Open my preferred terminal
         , ("M-<Return>", spawn myTerminal)
     -- Windows
-        , ("M-w", kill1)                           -- Kill the currently focused client
+        , ("M-S-c", kill1) 
+        , ("M-w", killAllOtherCopies <+> kill1)         
         , ("M-S-a", killAll)                         -- Kill all windows on current workspace
-
+    -- Copy
+        , ("M-C-c", windows copyToAll)
+    -- Camera
+        , ("M-c", spawn "toggle_camera")
     -- Layouts
         , ("M-S-<Space>", sendMessage ToggleStruts)
         ]
@@ -130,6 +176,7 @@ main = do
        , borderWidth = myBorderWidth
        , layoutHook = myLayoutHook
        , startupHook = myStartupHook
+       , manageHook = myManageHook
        , logHook = dynamicLogWithPP $ xmobarPP
               -- the following variables beginning with 'pp' are settings for xmobar.
               { ppOutput = hPutStrLn xmproc0
